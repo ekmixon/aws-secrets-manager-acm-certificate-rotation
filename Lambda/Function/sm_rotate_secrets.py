@@ -131,18 +131,33 @@ def lambda_handler(event, context):
     # Make sure the version is staged correctly
     metadata = service_client.describe_secret(SecretId=arn)
     if not metadata['RotationEnabled']:
-        logger.error("Secret %s is not enabled for rotation" % arn)
-        raise ValueError("Secret %s is not enabled for rotation" % arn)
+        logger.error(f"Secret {arn} is not enabled for rotation")
+        raise ValueError(f"Secret {arn} is not enabled for rotation")
     versions = metadata['VersionIdsToStages']
     if token not in versions:
-        logger.error("Secret version %s has no stage for rotation of secret %s." % (token, arn))
-        raise ValueError("Secret version %s has no stage for rotation of secret %s." % (token, arn))
+        logger.error(
+            f"Secret version {token} has no stage for rotation of secret {arn}."
+        )
+
+        raise ValueError(
+            f"Secret version {token} has no stage for rotation of secret {arn}."
+        )
+
     if "AWSCURRENT" in versions[token]:
-        logger.info("Secret version %s already set as AWSCURRENT for secret %s." % (token, arn))
+        logger.info(
+            f"Secret version {token} already set as AWSCURRENT for secret {arn}."
+        )
+
         return
     elif "AWSPENDING" not in versions[token]:
-        logger.error("Secret version %s not set as AWSPENDING for rotation of secret %s." % (token, arn))
-        raise ValueError("Secret version %s not set as AWSPENDING for rotation of secret %s." % (token, arn))
+        logger.error(
+            f"Secret version {token} not set as AWSPENDING for rotation of secret {arn}."
+        )
+
+        raise ValueError(
+            f"Secret version {token} not set as AWSPENDING for rotation of secret {arn}."
+        )
+
 
     if step == "createSecret":
         create_secret(service_client, arn, token)
@@ -199,7 +214,7 @@ def create_secret(service_client, arn, token):
     # Now try to get the secret version, if that fails, put a new secret
     try:
         get_secret_dict(service_client, arn, 'AWSPENDING', token)
-        logger.info("createSecret: Successfully retrieved secret for %s." % arn)
+        logger.info(f"createSecret: Successfully retrieved secret for {arn}.")
     except service_client.exceptions.ResourceNotFoundException:
         if current_dict['CERTIFICATE_TYPE'] == 'ACM_ISSUED':
             current_dict = generate_acm_managed(current_dict, acm_client, renew_waiter, issue_waiter)
@@ -217,11 +232,13 @@ def create_secret(service_client, arn, token):
                 ## issue PCA certificate
                 current_dict = generate_customer_managed(current_dict, acm_pca_client, key)
             except Exception as e:
-                logger.error("CreateSecret: Unable to create secret with error: %s" % (e))
+                logger.error(f"CreateSecret: Unable to create secret with error: {e}")
 
         # Put the secret
         service_client.put_secret_value(SecretId=arn, ClientRequestToken=token, SecretString=json.dumps(current_dict), VersionStages=['AWSPENDING'])
-        logger.info("createSecret: Successfully put secret for ARN %s and version %s." % (arn, token))
+        logger.info(
+            f"createSecret: Successfully put secret for ARN {arn} and version {token}."
+        )
 
 
 def set_secret(service_client, arn, token):
@@ -292,18 +309,23 @@ def finish_secret(service_client, arn, token):
         if "AWSCURRENT" in metadata["VersionIdsToStages"][version]:
             if version == token:
                 # The correct version is already marked as current, return
-                logger.info("finishSecret: Version %s already marked as AWSCURRENT for %s" % (version, arn))
+                logger.info(
+                    f"finishSecret: Version {version} already marked as AWSCURRENT for {arn}"
+                )
+
                 return
             current_version = version
             break
 
     # Finalize by staging the secret version current
     service_client.update_secret_version_stage(SecretId=arn, VersionStage="AWSCURRENT", MoveToVersionId=token, RemoveFromVersionId=current_version)
-    logger.info("finishSecret: Successfully set AWSCURRENT stage to version %s for secret %s." % (token, arn))
+    logger.info(
+        f"finishSecret: Successfully set AWSCURRENT stage to version {token} for secret {arn}."
+    )
 
 
 def get_secret_dict(service_client, arn, stage, token=None):
-  """Gets the secret dictionary corresponding for the secret arn, stage, and token
+    """Gets the secret dictionary corresponding for the secret arn, stage, and token
   This helper function gets credentials for the arn and stage passed in and returns the dictionary by parsing the JSON string
   Args:
       service_client (client): The secrets manager service client
@@ -316,31 +338,31 @@ def get_secret_dict(service_client, arn, stage, token=None):
       ResourceNotFoundException: If the secret with the specified arn and stage does not exist
       ValueError: If the secret is not valid JSON
   """
-  required_fields = []
+    required_fields = []
 
 
-  # Only do VersionId validation against the stage if a token is passed in
-  if token:
-      secret = service_client.get_secret_value(SecretId=arn, VersionId=token, VersionStage=stage)
-  else:
-      secret = service_client.get_secret_value(SecretId=arn, VersionStage=stage)
-  plaintext = secret['SecretString']
-  secret_dict = json.loads(plaintext)
+    # Only do VersionId validation against the stage if a token is passed in
+    if token:
+        secret = service_client.get_secret_value(SecretId=arn, VersionId=token, VersionStage=stage)
+    else:
+        secret = service_client.get_secret_value(SecretId=arn, VersionStage=stage)
+    plaintext = secret['SecretString']
+    secret_dict = json.loads(plaintext)
 
-  if 'CERTIFICATE_TYPE' not in secret_dict: # check that we got a certificate type
-    raise KeyError("Certificate Type (CERTIFICATE_TYPE) must be set to generate the proper certificate")
-  
-  if secret_dict['CERTIFICATE_TYPE'] == 'ACM_ISSUED':
-    required_fields = ["CA_ARN", "COMMON_NAME", "ENVIRONMENT"]
-  else:
-    required_fields = ["CA_ARN", "COMMON_NAME", "TEMPLATE_ARN", "KEY_ALGORITHM", "KEY_SIZE", "SIGNING_ALGORITHM", "SIGNING_HASH"]
+    if 'CERTIFICATE_TYPE' not in secret_dict: # check that we got a certificate type
+      raise KeyError("Certificate Type (CERTIFICATE_TYPE) must be set to generate the proper certificate")
 
-  for field in required_fields:
-      if field not in secret_dict:
-          raise KeyError("%s key is missing from secret JSON" % field)
+    if secret_dict['CERTIFICATE_TYPE'] == 'ACM_ISSUED':
+      required_fields = ["CA_ARN", "COMMON_NAME", "ENVIRONMENT"]
+    else:
+      required_fields = ["CA_ARN", "COMMON_NAME", "TEMPLATE_ARN", "KEY_ALGORITHM", "KEY_SIZE", "SIGNING_ALGORITHM", "SIGNING_HASH"]
 
-  # Parse and return the secret JSON string
-  return secret_dict
+    for field in required_fields:
+        if field not in secret_dict:
+            raise KeyError(f"{field} key is missing from secret JSON")
+
+    # Parse and return the secret JSON string
+    return secret_dict
 
 
 def generate_private_key(key_type, size, curve):
@@ -404,8 +426,14 @@ def generate_csr(current_dict, key):
 
 
 
-    hash_algorithm = None if (isinstance(key, ed25519.Ed25519PrivateKey) or
-                              isinstance(key, ed448.Ed448PrivateKey)) else getattr(globals()['hashes'], current_dict["SIGNING_HASH"].upper())()
+    hash_algorithm = (
+        None
+        if isinstance(key, (ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey))
+        else getattr(
+            globals()['hashes'], current_dict["SIGNING_HASH"].upper()
+        )()
+    )
+
 
     csr = builder.sign(
         key,
@@ -428,6 +456,9 @@ def get_signature_algorithm(alg_type, alg_hash):
             ValueError: Algorithm type not supported
     """
 
+    if alg_hash not in ['sha256', 'sha384', 'sha512']:
+        return ValueError('Signing Algorithm not supported')
+
     signing_algorithms = {
         "RSA": {
             "sha256": "SHA256WITHRSA",
@@ -440,9 +471,6 @@ def get_signature_algorithm(alg_type, alg_hash):
             "sha512": "SHA512WITHECDSA" 
         }
     }
-    if alg_hash not in ['sha256', 'sha384', 'sha512']:
-        return ValueError('Signing Algorithm not supported')
-
     return signing_algorithms[alg_type][alg_hash]
 
 
@@ -464,7 +492,7 @@ def generate_acm_managed(current_dict, client, renew, issue):
     # renew certificate to test everything works
     if 'CERTIFICATE_ARN' in current_dict and current_dict['ENVIRONMENT'] == 'TEST':
         CERTIFICATE_ARN = current_dict['CERTIFICATE_ARN']
-        client.renew_certificate(CertificateArn=current_dict['CERTIFICATE_ARN'])
+        client.renew_certificate(CertificateArn=CERTIFICATE_ARN)
         # wait for certificate renewal to complete
         renew.wait(CertificateArn=CERTIFICATE_ARN)
 
@@ -494,8 +522,8 @@ def generate_acm_managed(current_dict, client, renew, issue):
             encryption_algorithm = serialization.NoEncryption()
         ).decode()
     except WaiterError as e:
-        logger.error("CreateSecret: Unable to create secret with error: %s" % (e))
-    
+        logger.error(f"CreateSecret: Unable to create secret with error: {e}")
+
     return current_dict
 
 

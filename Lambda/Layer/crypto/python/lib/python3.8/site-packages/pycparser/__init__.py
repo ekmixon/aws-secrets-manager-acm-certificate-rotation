@@ -41,9 +41,14 @@ def preprocess_file(filename, cpp_path='cpp', cpp_args=''):
         # as \n for Python's purpose
         text = check_output(path_list, universal_newlines=True)
     except OSError as e:
-        raise RuntimeError("Unable to invoke 'cpp'.  " +
-            'Make sure its path was passed correctly\n' +
-            ('Original error: %s' % e))
+        raise RuntimeError(
+            (
+                "Unable to invoke 'cpp'.  "
+                + 'Make sure its path was passed correctly\n'
+                + f'Original error: {e}'
+            )
+        )
+
 
     return text
 

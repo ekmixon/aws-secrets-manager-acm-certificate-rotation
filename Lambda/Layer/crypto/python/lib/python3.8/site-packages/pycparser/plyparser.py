@@ -23,8 +23,9 @@ class Coord(object):
         self.column = column
 
     def __str__(self):
-        str = "%s:%s" % (self.file, self.line)
-        if self.column: str += ":%s" % self.column
+        str = f"{self.file}:{self.line}"
+        if self.column:
+            str += f":{self.column}"
         return str
 
 
@@ -37,13 +38,13 @@ class PLYParser(object):
             for it. The name of the optional rule is
             <rulename>_opt
         """
-        optname = rulename + '_opt'
+        optname = f'{rulename}_opt'
 
         def optrule(self, p):
             p[0] = p[1]
 
         optrule.__doc__ = '%s : empty\n| %s' % (optname, rulename)
-        optrule.__name__ = 'p_%s' % optname
+        optrule.__name__ = f'p_{optname}'
         setattr(self.__class__, optrule.__name__, optrule)
 
     def _coord(self, lineno, column=None):
@@ -64,7 +65,7 @@ class PLYParser(object):
         return self._coord(p.lineno(token_idx), column)
 
     def _parse_error(self, msg, coord):
-        raise ParseError("%s: %s" % (coord, msg))
+        raise ParseError(f"{coord}: {msg}")
 
 
 def parameterized(*params):
